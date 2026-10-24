@@ -372,10 +372,12 @@ class UltimateHorseRaceOptimizer:
         return wide_bets, umaren_bets, umatan_bets
 
     def allocate_budget(
-        self, bets: list[dict], mode: str, custom_budget: int = None
+        self, bets: list[dict], mode: str, custom_budget: int = None, total_race_budget: int = None
     ) -> pd.DataFrame:
         """資金配分アルゴリズム"""
         target_budget = custom_budget if custom_budget is not None else self.budget
+        race_budget = total_race_budget if total_race_budget is not None else self.budget
+
         if not bets or target_budget <= 0:
             return pd.DataFrame()
 
@@ -407,9 +409,12 @@ class UltimateHorseRaceOptimizer:
 
         df = pd.DataFrame(results)
         df["期待値(EV)"] = (df["prob"] * df["オッズ"]).round(2)
+        df["期待回収率"] = (df["期待値(EV)"] * 100).map("{:.1f}%".format)
         df["想定払戻金"] = (df["購入額"] * df["オッズ"]).astype(int)
-        df["想定回収率"] = (
-            (df["想定払戻金"] / target_budget) * 100
+        
+        # 総予算基準の正しい「的中時回収率」
+        df["的中時回収率 (対総予算)"] = (
+            (df["想定払戻金"] / race_budget) * 100
         ).map("{:.1f}%".format)
 
         return df[
@@ -418,9 +423,10 @@ class UltimateHorseRaceOptimizer:
                 "買い目",
                 "オッズ",
                 "期待値(EV)",
+                "期待回収率",
                 "購入額",
                 "想定払戻金",
-                "想定回収率",
+                "的中時回収率 (対総予算)",
                 "prob",
             ]
         ]
@@ -579,7 +585,6 @@ edited_df = st.data_editor(
 
 # 計算実行処理
 if st.button("🚀 最適資金配分を計算する", type="primary"):
-    # キャッシュされた編集表キーを消去して最新計算データで画面強制更新
     for k in ["combined_editor", "wide_editor", "umaren_editor", "umatan_editor"]:
         if k in st.session_state:
             del st.session_state[k]
@@ -698,9 +703,9 @@ if st.session_state.get("calculated", False):
             c_umaren_bets = [b for b in updated_combined_bets if b["券種"] == "馬連"]
             c_umatan_bets = [b for b in updated_combined_bets if b["券種"] == "馬単"]
 
-            df_res_wide = optimizer.allocate_budget(c_wide_bets, mode="dutching", custom_budget=b_wide) if b_wide > 0 else pd.DataFrame()
-            df_res_umaren = optimizer.allocate_budget(c_umaren_bets, mode="kelly", custom_budget=b_umaren) if b_umaren > 0 else pd.DataFrame()
-            df_res_umatan = optimizer.allocate_budget(c_umatan_bets, mode="kelly", custom_budget=b_umatan) if b_umatan > 0 else pd.DataFrame()
+            df_res_wide = optimizer.allocate_budget(c_wide_bets, mode="dutching", custom_budget=b_wide, total_race_budget=total_budget) if b_wide > 0 else pd.DataFrame()
+            df_res_umaren = optimizer.allocate_budget(c_umaren_bets, mode="kelly", custom_budget=b_umaren, total_race_budget=total_budget) if b_umaren > 0 else pd.DataFrame()
+            df_res_umatan = optimizer.allocate_budget(c_umatan_bets, mode="kelly", custom_budget=b_umatan, total_race_budget=total_budget) if b_umatan > 0 else pd.DataFrame()
 
             df_mix_final = pd.concat([df_res_wide, df_res_umaren, df_res_umatan], ignore_index=True)
 
@@ -727,8 +732,17 @@ if st.session_state.get("calculated", False):
                     total_allocated = df_mix_final["購入額"].sum()
                     st.metric("総購入予定額", f"{total_allocated:,} 円", delta=f"予算 {total_budget:,} 円")
                 with col_m2:
-                    max_payout = df_mix_final["想定払戻金"].max()
-                    st.metric("最大想定払戻金 (跳ね時)", f"{max_payout:,} 円", delta=f"最高回収率 {max_payout / total_budget * 100:.1f}%")
+                    if max_mix_ev < 1.0:
+                        avg_expected_ret = max_mix_ev * 100
+                        st.metric(
+                            "平均期待回収率 (長期期待値)", 
+                            f"{avg_expected_ret:.1f}%", 
+                            delta=f"損失期待値 {(avg_expected_ret - 100):.1f}%",
+                            delta_color="normal"
+                        )
+                    else:
+                        max_payout = df_mix_final["想定払戻金"].max()
+                        st.metric("最大想定払戻金 (跳ね時)", f"{max_payout:,} 円", delta=f"最高回収率 {max_payout / total_budget * 100:.1f}%")
 
     # タブ1: ワイド
     with tab1:
@@ -749,7 +763,7 @@ if st.session_state.get("calculated", False):
             )
             
             updated_wide_bets = edited_wide.to_dict(orient="records")
-            df_wide = optimizer.allocate_budget(updated_wide_bets, mode="dutching")
+            df_wide = optimizer.allocate_budget(updated_wide_bets, mode="dutching", total_race_budget=total_budget)
 
             max_ev_wide = df_wide["期待値(EV)"].max()
             min_ret = df_wide["想定払戻金"].min()
@@ -794,7 +808,7 @@ if st.session_state.get("calculated", False):
             )
 
             updated_umaren_bets = edited_umaren.to_dict(orient="records")
-            df_umaren = optimizer.allocate_budget(updated_umaren_bets, mode="kelly")
+            df_umaren = optimizer.allocate_budget(updated_umaren_bets, mode="kelly", total_race_budget=total_budget)
 
             max_ev_umaren = df_umaren["期待値(EV)"].max()
 
@@ -839,7 +853,7 @@ if st.session_state.get("calculated", False):
             )
 
             updated_umatan_bets = edited_umatan.to_dict(orient="records")
-            df_umatan = optimizer.allocate_budget(updated_umatan_bets, mode="kelly")
+            df_umatan = optimizer.allocate_budget(updated_umatan_bets, mode="kelly", total_race_budget=total_budget)
 
             max_ev_umatan = df_umatan["期待値(EV)"].max()
 
