@@ -730,15 +730,14 @@ if st.session_state.get("calculated", False):
                 col_m1, col_m2 = st.columns(2)
                 with col_m1:
                     total_allocated = df_mix_final["購入額"].sum()
-                    st.metric("総購入予定額", f"{total_allocated:,} 円", delta=f"予算 {total_budget:,} 円")
+                    st.metric("総購入予定額", f"{total_allocated:,} 円", delta=f"予算 {total_budget:,} 円", delta_color="off")
                 with col_m2:
                     if max_mix_ev < 1.0:
                         avg_expected_ret = max_mix_ev * 100
                         st.metric(
                             "平均期待回収率 (長期期待値)", 
                             f"{avg_expected_ret:.1f}%", 
-                            delta=f"損失期待値 {(avg_expected_ret - 100):.1f}%",
-                            delta_color="normal"
+                            delta=f"{(avg_expected_ret - 100):.1f}%"
                         )
                     else:
                         max_payout = df_mix_final["想定払戻金"].max()
@@ -775,17 +774,34 @@ if st.session_state.get("calculated", False):
                 st.caption(
                     "※理由: 最高期待値(EV)が1.0未満、または的中しても回収率100%未満（トリガミ）となります。"
                 )
+                st.dataframe(df_wide.drop(columns=["prob"]), use_container_width=True)
+
+                col_w1, col_w2 = st.columns(2)
+                with col_w1:
+                    total_alloc_w = df_wide["購入額"].sum()
+                    st.metric("総購入予定額", f"{total_alloc_w:,} 円", delta=f"予算 {total_budget:,} 円", delta_color="off")
+                with col_w2:
+                    avg_ret_w = max_ev_wide * 100
+                    st.metric(
+                        "平均期待回収率 (長期期待値)", 
+                        f"{avg_ret_w:.1f}%", 
+                        delta=f"{(avg_ret_w - 100):.1f}%"
+                    )
             else:
                 st.success(
                     "✅ **【購入推奨】十分な期待値と元本保証ラインが確保されています。**"
                 )
-
-            st.dataframe(df_wide.drop(columns=["prob"]), use_container_width=True)
-            st.metric(
-                label="的中時 最小想定払戻金",
-                value=f"{min_ret:,} 円",
-                delta=f"回収率 {min_ret / total_budget * 100:.1f}%",
-            )
+                st.dataframe(df_wide.drop(columns=["prob"]), use_container_width=True)
+                col_w1, col_w2 = st.columns(2)
+                with col_w1:
+                    total_alloc_w = df_wide["購入額"].sum()
+                    st.metric("総購入予定額", f"{total_alloc_w:,} 円", delta=f"予算 {total_budget:,} 円", delta_color="off")
+                with col_w2:
+                    st.metric(
+                        label="的中時 最小想定払戻金",
+                        value=f"{min_ret:,} 円",
+                        delta=f"回収率 {min_ret / total_budget * 100:.1f}%",
+                    )
         else:
             st.warning("条件に該当するワイドの買い目がありません。")
 
@@ -819,18 +835,35 @@ if st.session_state.get("calculated", False):
                 st.caption(
                     "※理由: 買い目全体の最高期待値(EV)が1.0未満のため、賭け続けると理論上マイナス収支になります。"
                 )
+                st.dataframe(df_umaren.drop(columns=["prob"]), use_container_width=True)
+
+                col_u1, col_u2 = st.columns(2)
+                with col_u1:
+                    total_alloc_u = df_umaren["購入額"].sum()
+                    st.metric("総購入予定額", f"{total_alloc_u:,} 円", delta=f"予算 {total_budget:,} 円", delta_color="off")
+                with col_u2:
+                    avg_ret_u = max_ev_umaren * 100
+                    st.metric(
+                        "平均期待回収率 (長期期待値)", 
+                        f"{avg_ret_u:.1f}%", 
+                        delta=f"{(avg_ret_u - 100):.1f}%"
+                    )
             else:
                 st.success(
                     "✅ **【購入推奨】プラス期待値（EV ≥ 1.0）の買い目が含まれています。**"
                 )
-
-            st.dataframe(df_umaren.drop(columns=["prob"]), use_container_width=True)
-            max_ret = df_umaren["想定払戻金"].max()
-            st.metric(
-                label="最大想定払戻金",
-                value=f"{max_ret:,} 円",
-                delta=f"最高回収率 {max_ret / total_budget * 100:.1f}%",
-            )
+                st.dataframe(df_umaren.drop(columns=["prob"]), use_container_width=True)
+                col_u1, col_u2 = st.columns(2)
+                with col_u1:
+                    total_alloc_u = df_umaren["購入額"].sum()
+                    st.metric("総購入予定額", f"{total_alloc_u:,} 円", delta=f"予算 {total_budget:,} 円", delta_color="off")
+                with col_u2:
+                    max_ret = df_umaren["想定払戻金"].max()
+                    st.metric(
+                        label="最大想定払戻金",
+                        value=f"{max_ret:,} 円",
+                        delta=f"最高回収率 {max_ret / total_budget * 100:.1f}%",
+                    )
         else:
             st.warning("条件に該当する馬連の買い目がありません。")
 
@@ -864,17 +897,34 @@ if st.session_state.get("calculated", False):
                 st.caption(
                     "※理由: 1着0%切り補正を行っても最高期待値(EV)が1.0未満のため、見送りを推奨します。"
                 )
+                st.dataframe(df_umatan.drop(columns=["prob"]), use_container_width=True)
+
+                col_ut1, col_ut2 = st.columns(2)
+                with col_ut1:
+                    total_alloc_ut = df_umatan["購入額"].sum()
+                    st.metric("総購入予定額", f"{total_alloc_ut:,} 円", delta=f"予算 {total_budget:,} 円", delta_color="off")
+                with col_ut2:
+                    avg_ret_ut = max_ev_umatan * 100
+                    st.metric(
+                        "平均期待回収率 (長期期待値)", 
+                        f"{avg_ret_ut:.1f}%", 
+                        delta=f"{(avg_ret_ut - 100):.1f}%"
+                    )
             else:
                 st.success(
                     "✅ **【購入推奨】高回収率を狙える高期待値（EV ≥ 1.0）の買い目です。**"
                 )
-
-            st.dataframe(df_umatan.drop(columns=["prob"]), use_container_width=True)
-            max_ret = df_umatan["想定払戻金"].max()
-            st.metric(
-                label="最大想定払戻金",
-                value=f"{max_ret:,} 円",
-                delta=f"最高回収率 {max_ret / total_budget * 100:.1f}%",
-            )
+                st.dataframe(df_umatan.drop(columns=["prob"]), use_container_width=True)
+                col_ut1, col_ut2 = st.columns(2)
+                with col_ut1:
+                    total_alloc_ut = df_umatan["購入額"].sum()
+                    st.metric("総購入予定額", f"{total_alloc_ut:,} 円", delta=f"予算 {total_budget:,} 円", delta_color="off")
+                with col_ut2:
+                    max_ret = df_umatan["想定払戻金"].max()
+                    st.metric(
+                        label="最大想定払戻金",
+                        value=f"{max_ret:,} 円",
+                        delta=f"最高回収率 {max_ret / total_budget * 100:.1f}%",
+                    )
         else:
             st.warning("条件に該当する馬単の買い目がありません。")
