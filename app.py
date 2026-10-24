@@ -12,31 +12,43 @@ class UltimateHorseRaceOptimizer:
     def __init__(self, budget: int = 10000):
         self.budget = budget
 
-    def get_base_probabilities(self, odds: float, rank: int = 1) -> dict:
+    def get_base_probabilities(self, odds: float, total_horses: int = 16) -> dict:
         """
-        オッズ帯および人気順に基づく基本着順確率
+        オッズ帯および出走頭数(total_horses)に基づく基本着順確率
         【JRA統計データ準拠】
         """
+        # 頭数補正スケール (16頭を基準とし、頭数が少ないほど上位人気の着順確率が上昇)
+        head_scale = 16.0 / max(total_horses, 5)
+        head_scale_clamped = max(0.85, min(head_scale, 1.45))
+
         if odds <= 1.2:
-            return {"p1": 0.65, "p2": 0.16, "p3": 0.08}
+            p1, p2, p3 = 0.65, 0.16, 0.08
         elif odds <= 1.4:
-            return {"p1": 0.55, "p2": 0.18, "p3": 0.10}
+            p1, p2, p3 = 0.55, 0.18, 0.10
         elif odds <= 1.9:
-            return {"p1": 0.42, "p2": 0.20, "p3": 0.13}
+            p1, p2, p3 = 0.42, 0.20, 0.13
         elif odds <= 2.4:
-            return {"p1": 0.33, "p2": 0.21, "p3": 0.14}
+            p1, p2, p3 = 0.33, 0.21, 0.14
         elif odds <= 2.9:
-            return {"p1": 0.27, "p2": 0.20, "p3": 0.14}
+            p1, p2, p3 = 0.27, 0.20, 0.14
         elif odds <= 3.9:
-            return {"p1": 0.21, "p2": 0.18, "p3": 0.15}
+            p1, p2, p3 = 0.21, 0.18, 0.15
         elif odds <= 6.9:
-            return {"p1": 0.14, "p2": 0.16, "p3": 0.14}
+            p1, p2, p3 = 0.14, 0.16, 0.14
         elif odds <= 14.9:
-            return {"p1": 0.07, "p2": 0.10, "p3": 0.11}
+            p1, p2, p3 = 0.07, 0.10, 0.11
         elif odds <= 29.9:
-            return {"p1": 0.03, "p2": 0.05, "p3": 0.07}
+            p1, p2, p3 = 0.03, 0.05, 0.07
         else:
-            return {"p1": 0.01, "p2": 0.02, "p3": 0.03}
+            p1, p2, p3 = 0.01, 0.02, 0.03
+
+        # 少頭数時は上位確率が上振れ、多頭数時は分散
+        if odds <= 3.9:
+            p1 = min(p1 * head_scale_clamped, 0.85)
+            p2 = min(p2 * head_scale_clamped, 0.35)
+            p3 = min(p3 * head_scale_clamped, 0.25)
+
+        return {"p1": p1, "p2": p2, "p3": p3}
 
     def get_venue_style_modifier(
         self, venue: str, track: str, style: str
@@ -170,21 +182,22 @@ class UltimateHorseRaceOptimizer:
         self, race_info: dict, horse: dict, rank: int
     ) -> dict[str, float]:
         """
-        【超厳格化モデル】市場効率性を尊重したShrinkage（オッズ回帰）確率算出
+        【出走頭数考慮型モデル】市場効率性を尊重したShrinkage（オッズ回帰）確率算出
         """
         odds = float(horse["odds"])
         mark = int(horse["mark"])
         style = horse["style"]
         frame = int(horse.get("frame", 4))
         jockey = str(horse.get("jockey", "その他"))
+        total_horses = int(race_info.get("total_horses", 16))
 
         # 1. 単勝オッズからの市場事前勝率（JRA控除率20%を考慮した市場確率）
         market_p1 = min(max(0.80 / odds, 0.001), 0.85)
 
-        base = self.get_base_probabilities(odds, rank)
+        base = self.get_base_probabilities(odds, total_horses)
         p1, p2, p3 = base["p1"], base["p2"], base["p3"]
 
-        # 2. 印による補正（保守的化）
+        # 2. 印による補正
         if mark == 4:
             p1 *= 1.08
             p2 *= 1.04
@@ -192,12 +205,12 @@ class UltimateHorseRaceOptimizer:
             p2 *= 1.05
             p3 *= 1.05
         elif mark == 2:
-            # 1着確率0%固定。1着確率の約30%分のみを2着(60%)・3着(40%)に慎重に分配
+            # 1着確率0%固定。1着確率の約30%分のみを2着(60%)・3着(40%)に分配
             p2 += p1 * 0.30
             p3 += p1 * 0.20
             p1 = 0.0
 
-        # 3. 各種条件マルチプライヤーの加算型平滑化（掛け算爆発防止）
+        # 3. 各種条件マルチプライヤーの加算型平滑化
         venue_mod = self.get_venue_style_modifier(
             race_info["venue"], race_info["track"], style
         ) - 1.0
@@ -237,15 +250,14 @@ class UltimateHorseRaceOptimizer:
         raw_p2 = p2 * clipped_mod * pos_mods["p2"]
         raw_p3 = p3 * clipped_mod * pos_mods["p3"]
 
-        # 4. 【最重要】市場オッズ確率への強力なベイズ回帰 (Shrinkage: 市場75%, モデル25%)
-        # オッズ（市場の集積知）を強力に尊重し、モデルの自惚れを防ぐ
+        # 4. 市場オッズ確率への強力なベイズ回帰 (Shrinkage: 市場75%, モデル25%)
         if mark == 2:
             final_p1 = 0.0
         else:
             final_p1 = 0.75 * market_p1 + 0.25 * raw_p1
 
-        final_p2 = 0.75 * base["p2"] + 0.25 * raw_p2
-        final_p3 = 0.75 * base["p3"] + 0.25 * raw_p3
+        final_p2 = 0.75 * (market_p1 * 0.65) + 0.25 * raw_p2
+        final_p3 = 0.75 * (market_p1 * 0.50) + 0.25 * raw_p3
 
         return {
             "p1": final_p1,
@@ -253,29 +265,13 @@ class UltimateHorseRaceOptimizer:
             "p3": final_p3,
         }
 
-    def _normalize_probabilities(self, horses: list[dict]) -> None:
-        """全出走馬の確率総和を1.0に厳格正規化"""
-        sum_p1 = sum(h["probs"]["p1"] for h in horses)
-        sum_p2 = sum(h["probs"]["p2"] for h in horses)
-        sum_p3 = sum(h["probs"]["p3"] for h in horses)
-
-        for h in horses:
-            if sum_p1 > 0:
-                h["probs"]["p1"] /= sum_p1
-            if sum_p2 > 0:
-                h["probs"]["p2"] /= sum_p2
-            if sum_p3 > 0:
-                h["probs"]["p3"] /= sum_p3
-
     def generate_strategy(
         self, race_info: dict, horses: list[dict]
     ) -> tuple[list[dict], list[dict], list[dict]]:
-        """買い目データと厳格確率の生成"""
+        """買い目データと頭数考慮型確率の生成"""
         sorted_horses = sorted(horses, key=lambda x: float(x["odds"]))
         for idx, h in enumerate(sorted_horses):
             h["probs"] = self.adjust_probabilities(race_info, h, rank=idx + 1)
-
-        self._normalize_probabilities(horses)
 
         wide_bets, umaren_bets, umatan_bets = [], [], []
 
@@ -289,9 +285,8 @@ class UltimateHorseRaceOptimizer:
                 p_top3_ax = ax["probs"]["p1"] + ax["probs"]["p2"] + ax["probs"]["p3"]
                 p_top3_op = op["probs"]["p1"] + op["probs"]["p2"] + op["probs"]["p3"]
 
-                # 保守的同着モデル
-                p_wide = min(p_top3_ax * p_top3_op * 0.72, 0.55)
-                est_wide_odds = max(round(0.775 / max(p_wide, 1e-4), 1), 1.1)
+                p_wide = min(p_top3_ax * (p_top3_op / max(1.8 - 0.4 * p_top3_ax, 0.8)), 0.45)
+                est_wide_odds = max(round(0.775 / max(p_wide, 1e-4), 1), 1.5)
                 w_pair = sorted([int(ax["no"]), int(op["no"])])
                 wide_bets.append(
                     {
@@ -309,11 +304,12 @@ class UltimateHorseRaceOptimizer:
                     ax1, ax2 = axes[i], axes[j]
                     p1_1, p2_1 = ax1["probs"]["p1"], ax1["probs"]["p2"]
                     p1_2, p2_2 = ax2["probs"]["p1"], ax2["probs"]["p2"]
-                    p_umaren = (p1_1 * (p2_2 / max(1.0 - p2_1, 1e-5))) + (
-                        p1_2 * (p2_1 / max(1.0 - p2_2, 1e-5))
-                    )
-                    p_umaren *= 0.78
-                    est_umaren_odds = max(round(0.775 / max(p_umaren, 1e-4), 1), 1.2)
+                    
+                    denom1 = max(1.0 - p2_1, 0.2)
+                    denom2 = max(1.0 - p2_2, 0.2)
+                    p_umaren = (p1_1 * (p2_2 / denom1)) + (p1_2 * (p2_1 / denom2))
+                    p_umaren = min(p_umaren, 0.25)
+                    est_umaren_odds = max(round(0.775 / max(p_umaren, 1e-4), 1), 2.5)
                     pair = sorted([int(ax1["no"]), int(ax2["no"])])
                     umaren_bets.append(
                         {
@@ -328,11 +324,12 @@ class UltimateHorseRaceOptimizer:
                 for op in opponents:
                     p1_ax, p2_ax = ax["probs"]["p1"], ax["probs"]["p2"]
                     p1_op, p2_op = op["probs"]["p1"], op["probs"]["p2"]
-                    p_umaren = (p1_ax * (p2_op / max(1.0 - p2_ax, 1e-5))) + (
-                        p1_op * (p2_ax / max(1.0 - p2_op, 1e-5))
-                    )
-                    p_umaren *= 0.78
-                    est_umaren_odds = max(round(0.775 / max(p_umaren, 1e-4), 1), 1.2)
+                    
+                    denom_ax = max(1.0 - p2_ax, 0.2)
+                    denom_op = max(1.0 - p2_op, 0.2)
+                    p_umaren = (p1_ax * (p2_op / denom_ax)) + (p1_op * (p2_ax / denom_op))
+                    p_umaren = min(p_umaren, 0.25)
+                    est_umaren_odds = max(round(0.775 / max(p_umaren, 1e-4), 1), 2.5)
                     pair = sorted([int(ax["no"]), int(op["no"])])
                     umaren_bets.append(
                         {
@@ -349,12 +346,14 @@ class UltimateHorseRaceOptimizer:
             opponents = [h for h in horses if int(h["no"]) != int(ax["no"])]
             for op in opponents:
                 p1_ax = ax["probs"]["p1"]
-                p2_ax = ax["probs"]["p2"]
                 p2_op = op["probs"]["p2"]
-                p_umatan = p1_ax * (p2_op / max(1.0 - p2_ax, 1e-5)) * 0.78
+                
+                denom_ax = max(1.0 - ax["probs"]["p2"], 0.2)
+                p_umatan = p1_ax * (p2_op / denom_ax)
+                p_umatan = min(p_umatan, 0.20)
                 if p_umatan > 0:
                     est_umatan_odds = max(
-                        round(0.750 / max(p_umatan, 1e-4), 1), 1.5
+                        round(0.750 / max(p_umatan, 1e-4), 1), 3.0
                     )
                     umatan_bets.append(
                         {
@@ -435,9 +434,9 @@ st.set_page_config(
     page_title="競馬傾斜買い計算機", page_icon="🏇", layout="wide"
 )
 
-st.title("🏇 競馬オッズ・ベイズ傾斜買い計算アプリ (超厳格化モデル搭載)")
+st.title("🏇 競馬オッズ・ベイズ傾斜買い計算アプリ (頭数考慮モデル搭載)")
 st.caption(
-    "市場オッズ集積知への強いベイズ回帰(75%) × 加算型補正平滑化 | 期待値上振れを徹底防衛した超現実的判定"
+    "出走頭数(5〜18頭)×市場オッズ集積知のベイズ回帰 | 期待値上振れを徹底防衛した現実的資金配分"
 )
 
 # サイドバー設定
@@ -445,6 +444,11 @@ st.sidebar.header("⚙️ レース条件設定")
 
 total_budget = st.sidebar.number_input(
     "総予算 (円)", min_value=1000, max_value=500000, value=10000, step=1000
+)
+
+total_horses = st.sidebar.number_input(
+    "出走頭数 (頭)", min_value=5, max_value=18, value=16, step=1,
+    help="レース全体の頭数を設定します（頭数に応じて人気順の着順確率や配分が調整されます）"
 )
 
 col_s1, col_s2 = st.sidebar.columns(2)
@@ -575,6 +579,11 @@ edited_df = st.data_editor(
 
 # 計算実行処理
 if st.button("🚀 最適資金配分を計算する", type="primary"):
+    # キャッシュされた編集表キーを消去して最新計算データで画面強制更新
+    for k in ["combined_editor", "wide_editor", "umaren_editor", "umatan_editor"]:
+        if k in st.session_state:
+            del st.session_state[k]
+
     raw_horses_list = edited_df.to_dict(orient="records")
 
     horses_list = [
@@ -590,6 +599,7 @@ if st.button("🚀 最適資金配分を計算する", type="primary"):
         "condition": condition,
         "pace": pace,
         "race_class": race_class,
+        "total_horses": total_horses,
     }
 
     has_axis = any(int(h["mark"]) in [3, 4] for h in horses_list)
@@ -621,9 +631,9 @@ if st.session_state.get("calculated", False):
     num_axes_input = len([h for h in horses_list if int(h.get("mark", 0)) in [3, 4]])
 
     if num_axes_input == 1:
-        st.info("💡 **【軸1頭戦略】**: 軸馬が1頭のため、**「馬単（1着固定）」＋「ワイド」**の構成で買い目を自動生成しました。")
+        st.info(f"💡 **【軸1頭戦略 / {total_horses}頭立て】**: 軸馬が1頭のため、**「馬単（1着固定）」＋「ワイド」**の構成で買い目を自動生成しました。")
     elif num_axes_input >= 2:
-        st.info(f"💡 **【軸{num_axes_input}頭マルチ戦略】**: 軸馬が複数頭のため、1着取りこぼしを防ぐ**「馬連（軸同士・軸相手）」＋「ワイド」**の構成で買い目を自動生成しました。")
+        st.info(f"💡 **【軸{num_axes_input}頭マルチ戦略 / {total_horses}頭立て】**: 軸馬が複数頭のため、1着取りこぼしを防ぐ**「馬連（軸同士・軸相手）」＋「ワイド」**の構成で買い目を自動生成しました。")
 
     tab_combined, tab1, tab2, tab3 = st.tabs(
         [
@@ -702,7 +712,7 @@ if st.session_state.get("calculated", False):
                         "⚠️ **【見送り推奨】数学的に買わない方が得です（購入すると損をする可能性が高いです）。**"
                     )
                     st.caption(
-                        "※理由: 厳格ベイズ試算において全買い目の最高期待値(EV)が1.0未満（JRA控除率20%の壁を越える構造的優位性なし）のため、購入すると長期的に損失を出す可能性が極めて高いです。"
+                        f"※理由: {total_horses}頭立ての厳格ベイズ試算において全買い目の最高期待値(EV)が1.0未満（JRA控除率の壁を越える構造的優位性なし）のため、購入すると長期的に損失を出す可能性が極めて高いです。"
                     )
                 else:
                     st.success(
