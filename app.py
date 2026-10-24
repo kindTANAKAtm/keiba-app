@@ -44,27 +44,27 @@ class UltimateHorseRaceOptimizer:
         """開催場×トラックごとの脚質補正"""
         if track == "ダート":
             if venue in ["函館", "小倉", "新潟", "札幌"]:
-                return 1.15 if style in ["逃げ", "先行"] else 0.88
+                return 1.10 if style in ["逃げ", "先行"] else 0.92
             elif venue in ["中山", "京都", "中京", "阪神", "福島"]:
-                return 1.08 if style in ["逃げ", "先行"] else 0.92
+                return 1.05 if style in ["逃げ", "先行"] else 0.96
             else:  # 東京
-                return 0.96 if style in ["逃げ", "先行"] else 1.04
+                return 0.97 if style in ["逃げ", "先行"] else 1.03
         else:  # 芝
             if venue in ["小倉", "中山", "函館"]:
-                return 1.12 if style in ["逃げ", "先行"] else 0.89
+                return 1.08 if style in ["逃げ", "先行"] else 0.93
             elif venue in ["阪神", "福島", "札幌"]:
-                return 1.06 if style in ["逃げ", "先行"] else 0.94
+                return 1.04 if style in ["逃げ", "先行"] else 0.96
             elif venue in ["東京", "新潟"]:
-                return 0.92 if style in ["逃げ", "先行"] else 1.08
+                return 0.95 if style in ["逃げ", "先行"] else 1.05
             else:  # 京都・中京
-                return 1.02 if style in ["逃げ", "先行"] else 0.98
+                return 1.01 if style in ["逃げ", "先行"] else 0.99
 
     def get_class_style_modifier(self, race_class: str, style: str) -> float:
         """クラス・条件による補正"""
         if "未勝利" in race_class or "新馬" in race_class:
-            return 1.10 if style in ["逃げ", "先行"] else 0.90
+            return 1.06 if style in ["逃げ", "先行"] else 0.94
         elif "オープン" in race_class or "重賞" in race_class:
-            return 0.92 if style in ["逃げ", "先行"] else 1.08
+            return 0.95 if style in ["逃げ", "先行"] else 1.05
         else:
             return 1.01 if style in ["逃げ", "先行"] else 0.99
 
@@ -74,20 +74,20 @@ class UltimateHorseRaceOptimizer:
         """距離×トラックごとの脚質補正"""
         if track == "ダート":
             if dist <= 1200:
-                return 1.18 if style in ["逃げ", "先行"] else 0.82
+                return 1.10 if style in ["逃げ", "先行"] else 0.90
             elif dist == 1600:
-                return 0.92 if style in ["逃げ", "先行"] else 1.10
+                return 0.95 if style in ["逃げ", "先行"] else 1.05
             elif dist in [1700, 1800, 2500]:
-                return 1.12 if style in ["逃げ", "先行"] else 0.88
+                return 1.08 if style in ["逃げ", "先行"] else 0.92
             else:
-                return 1.05 if style in ["逃げ", "先行"] else 0.95
+                return 1.03 if style in ["逃げ", "先行"] else 0.97
         else:  # 芝
             if dist >= 3000:
-                return 1.20 if style in ["逃げ", "先行"] else 0.80
+                return 1.12 if style in ["逃げ", "先行"] else 0.88
             elif dist <= 1400:
-                return 1.06 if style in ["逃げ", "先行"] else 0.94
+                return 1.04 if style in ["逃げ", "先行"] else 0.96
             else:
-                return 1.02 if style in ["逃げ", "先行"] else 0.98
+                return 1.01 if style in ["逃げ", "先行"] else 0.99
 
     def get_track_style_position_modifier(
         self, track: str, style: str
@@ -95,84 +95,162 @@ class UltimateHorseRaceOptimizer:
         """着順別（1, 2, 3着）偏重補正"""
         if track == "ダート":
             if style == "逃げ":
-                return {"p1": 1.12, "p2": 1.00, "p3": 0.90}
-            elif style == "先行":
-                return {"p1": 1.05, "p2": 1.05, "p3": 0.97}
-            elif style == "差し":
-                return {"p1": 0.88, "p2": 0.95, "p3": 1.12}
-            else:  # 追込
-                return {"p1": 0.80, "p2": 0.88, "p3": 1.08}
-        else:  # 芝
-            if style == "逃げ":
-                return {"p1": 1.08, "p2": 0.97, "p3": 0.92}
+                return {"p1": 1.06, "p2": 1.00, "p3": 0.95}
             elif style == "先行":
                 return {"p1": 1.03, "p2": 1.02, "p3": 0.98}
             elif style == "差し":
-                return {"p1": 0.95, "p2": 1.00, "p3": 1.12}
+                return {"p1": 0.94, "p2": 0.97, "p3": 1.06}
             else:  # 追込
-                return {"p1": 0.88, "p2": 0.94, "p3": 1.08}
+                return {"p1": 0.90, "p2": 0.94, "p3": 1.04}
+        else:  # 芝
+            if style == "逃げ":
+                return {"p1": 1.04, "p2": 0.98, "p3": 0.95}
+            elif style == "先行":
+                return {"p1": 1.02, "p2": 1.01, "p3": 0.99}
+            elif style == "差し":
+                return {"p1": 0.97, "p2": 1.00, "p3": 1.05}
+            else:  # 追込
+                return {"p1": 0.93, "p2": 0.96, "p3": 1.04}
+
+    def get_frame_modifier(
+        self, venue: str, track: str, dist: int, frame: int
+    ) -> float:
+        """枠順(1-8枠) 3着以内率補正"""
+        if frame < 1 or frame > 8:
+            return 1.0
+
+        if venue == "新潟" and dist == 1000 and track == "芝":
+            if frame in [7, 8]:
+                return 1.18
+            elif frame in [1, 2]:
+                return 0.82
+        elif track == "ダート" and dist == 1000:
+            if frame in [7, 8]:
+                return 1.12
+            elif frame in [1, 2]:
+                return 0.88
+
+        if venue == "中京" and frame in [1, 2]:
+            return 1.06
+
+        if track == "ダート" and frame in [7, 8]:
+            return 1.04
+
+        return 1.0
+
+    def get_jockey_modifier(self, jockey: str) -> float:
+        """騎手データに基づく補正"""
+        if not jockey or jockey == "その他":
+            return 1.0
+
+        if "ルメール" in jockey or "川田" in jockey:
+            return 1.10
+        elif any(
+            j in jockey
+            for j in ["戸崎", "松山", "武豊", "坂井", "横山武", "岩田望"]
+        ):
+            return 1.05
+        elif any(
+            j in jockey
+            for j in [
+                "鮫島克",
+                "西村淳",
+                "丹内",
+                "横山和",
+                "菅原明",
+                "団野",
+                "三浦",
+                "津村",
+            ]
+        ):
+            return 1.02
+        return 1.0
 
     def adjust_probabilities(
         self, race_info: dict, horse: dict, rank: int
     ) -> dict[str, float]:
         """
-        【厳格化モデル】過剰な期待値を防ぐ保守的ベイズ確率算出
+        【超厳格化モデル】市場効率性を尊重したShrinkage（オッズ回帰）確率算出
         """
         odds = float(horse["odds"])
         mark = int(horse["mark"])
         style = horse["style"]
+        frame = int(horse.get("frame", 4))
+        jockey = str(horse.get("jockey", "その他"))
+
+        # 1. 単勝オッズからの市場事前勝率（JRA控除率20%を考慮した市場確率）
+        market_p1 = min(max(0.80 / odds, 0.001), 0.85)
 
         base = self.get_base_probabilities(odds, rank)
         p1, p2, p3 = base["p1"], base["p2"], base["p3"]
 
-        # 印によるベイズ補正（過剰上振れを抑制）
+        # 2. 印による補正（保守的化）
         if mark == 4:
-            p1 = p1 * 1.18
-            p2 = p2 * 1.08
+            p1 *= 1.08
+            p2 *= 1.04
         elif mark == 3:
-            p2 = p2 * 1.12
-            p3 = p3 * 1.10
+            p2 *= 1.05
+            p3 *= 1.05
         elif mark == 2:
-            # 1着確率は厳密に0%固定、1着確率の質量を2着(60%)・3着(40%)へ保守的に転送
-            p2 += p1 * 0.50
-            p3 += p1 * 0.35
+            # 1着確率0%固定。1着確率の約30%分のみを2着(60%)・3着(40%)に慎重に分配
+            p2 += p1 * 0.30
+            p3 += p1 * 0.20
             p1 = 0.0
 
-        # 各種補正マルチプライヤー
+        # 3. 各種条件マルチプライヤーの加算型平滑化（掛け算爆発防止）
         venue_mod = self.get_venue_style_modifier(
             race_info["venue"], race_info["track"], style
-        )
+        ) - 1.0
         class_mod = self.get_class_style_modifier(
             race_info.get("race_class", "1勝/2勝/3勝クラス"), style
-        )
+        ) - 1.0
         dist_mod = self.get_distance_style_modifier(
             race_info["track"], race_info["dist"], style
-        )
+        ) - 1.0
+        frame_mod = self.get_frame_modifier(
+            race_info["venue"], race_info["track"], race_info["dist"], frame
+        ) - 1.0
+        jockey_mod = self.get_jockey_modifier(jockey) - 1.0
+
+        pace = race_info.get("pace", "ミドル")
+        pace_mod = 0.0
+        if pace == "ハイ":
+            pace_mod = -0.04 if style in ["逃げ", "先行"] else 0.05
+        elif pace == "スロー":
+            pace_mod = 0.05 if style in ["逃げ", "先行"] else -0.04
+
+        condition = race_info.get("condition", "良")
+        cond_mod = 0.0
+        if race_info["track"] == "ダート" and condition in ["重", "不良"]:
+            if style in ["逃げ", "先行"]:
+                cond_mod = 0.04
+
+        # 全条件の合成補正（上限+12%, 下限-12%に制限）
+        sum_mod = venue_mod + class_mod + dist_mod + frame_mod + jockey_mod + pace_mod + cond_mod
+        clipped_mod = 1.0 + max(min(sum_mod, 0.12), -0.12)
+
         pos_mods = self.get_track_style_position_modifier(
             race_info["track"], style
         )
 
-        pace = race_info.get("pace", "ミドル")
-        pace_mod = 1.0
-        if pace == "ハイ":
-            pace_mod = 0.90 if style in ["逃げ", "先行"] else 1.12
-        elif pace == "スロー":
-            pace_mod = 1.12 if style in ["逃げ", "先行"] else 0.88
+        raw_p1 = p1 * clipped_mod * pos_mods["p1"]
+        raw_p2 = p2 * clipped_mod * pos_mods["p2"]
+        raw_p3 = p3 * clipped_mod * pos_mods["p3"]
 
-        condition = race_info.get("condition", "良")
-        cond_mod = 1.0
-        if race_info["track"] == "ダート" and condition in ["重", "不良"]:
-            if style in ["逃げ", "先行"]:
-                cond_mod = 1.10
+        # 4. 【最重要】市場オッズ確率への強力なベイズ回帰 (Shrinkage: 市場75%, モデル25%)
+        # オッズ（市場の集積知）を強力に尊重し、モデルの自惚れを防ぐ
+        if mark == 2:
+            final_p1 = 0.0
+        else:
+            final_p1 = 0.75 * market_p1 + 0.25 * raw_p1
 
-        # マルチプライヤーの過剰積算防止（クランプ処理: 0.75 〜 1.30の範囲に収める）
-        raw_mod = venue_mod * class_mod * dist_mod * pace_mod * cond_mod
-        total_general_mod = max(min(raw_mod, 1.30), 0.75)
+        final_p2 = 0.75 * base["p2"] + 0.25 * raw_p2
+        final_p3 = 0.75 * base["p3"] + 0.25 * raw_p3
 
         return {
-            "p1": p1 * total_general_mod * pos_mods["p1"],
-            "p2": p2 * total_general_mod * pos_mods["p2"],
-            "p3": p3 * total_general_mod * pos_mods["p3"],
+            "p1": final_p1,
+            "p2": final_p2,
+            "p3": final_p3,
         }
 
     def _normalize_probabilities(self, horses: list[dict]) -> None:
@@ -192,7 +270,7 @@ class UltimateHorseRaceOptimizer:
     def generate_strategy(
         self, race_info: dict, horses: list[dict]
     ) -> tuple[list[dict], list[dict], list[dict]]:
-        """ワイド・馬連・馬単の買い目データを生成（保守的確率算出）"""
+        """買い目データと厳格確率の生成"""
         sorted_horses = sorted(horses, key=lambda x: float(x["odds"]))
         for idx, h in enumerate(sorted_horses):
             h["probs"] = self.adjust_probabilities(race_info, h, rank=idx + 1)
@@ -201,22 +279,18 @@ class UltimateHorseRaceOptimizer:
 
         wide_bets, umaren_bets, umatan_bets = [], [], []
 
-        # 軸馬（印4または3）
         axes = [h for h in horses if int(h["mark"]) in [3, 4]]
+        num_axes = len(axes)
 
+        # 1. ワイド
         for ax in axes:
             opponents = [h for h in horses if int(h["no"]) != int(ax["no"])]
-
             for op in opponents:
-                p_top3_ax = (
-                    ax["probs"]["p1"] + ax["probs"]["p2"] + ax["probs"]["p3"]
-                )
-                p_top3_op = (
-                    op["probs"]["p1"] + op["probs"]["p2"] + op["probs"]["p3"]
-                )
+                p_top3_ax = ax["probs"]["p1"] + ax["probs"]["p2"] + ax["probs"]["p3"]
+                p_top3_op = op["probs"]["p1"] + op["probs"]["p2"] + op["probs"]["p3"]
 
-                # 1. ワイド (JRA控除率: 約77.5%, 条件付き相関調整で保守化)
-                p_wide = min(p_top3_ax * p_top3_op * 0.92, 0.75)
+                # 保守的同着モデル
+                p_wide = min(p_top3_ax * p_top3_op * 0.72, 0.55)
                 est_wide_odds = max(round(0.775 / max(p_wide, 1e-4), 1), 1.1)
                 w_pair = sorted([int(ax["no"]), int(op["no"])])
                 wide_bets.append(
@@ -228,28 +302,56 @@ class UltimateHorseRaceOptimizer:
                     }
                 )
 
-                # 2. 馬連 (JRA控除率: 約77.5%)
-                p1_ax, p2_ax = ax["probs"]["p1"], ax["probs"]["p2"]
-                p1_op, p2_op = op["probs"]["p1"], op["probs"]["p2"]
-
-                p_umaren = (p1_ax * (p2_op / max(1.0 - p2_ax, 1e-5))) + (
-                    p1_op * (p2_ax / max(1.0 - p2_op, 1e-5))
-                )
-                # 保守的調整（相関・市場効率性による引き戻し）
-                p_umaren *= 0.88
-                est_umaren_odds = max(round(0.775 / max(p_umaren, 1e-4), 1), 1.2)
-                if p_umaren > 0:
+        # 2. 馬連 (軸2頭以上の時に推奨)
+        if num_axes >= 2:
+            for i in range(len(axes)):
+                for j in range(i + 1, len(axes)):
+                    ax1, ax2 = axes[i], axes[j]
+                    p1_1, p2_1 = ax1["probs"]["p1"], ax1["probs"]["p2"]
+                    p1_2, p2_2 = ax2["probs"]["p1"], ax2["probs"]["p2"]
+                    p_umaren = (p1_1 * (p2_2 / max(1.0 - p2_1, 1e-5))) + (
+                        p1_2 * (p2_1 / max(1.0 - p2_2, 1e-5))
+                    )
+                    p_umaren *= 0.78
+                    est_umaren_odds = max(round(0.775 / max(p_umaren, 1e-4), 1), 1.2)
+                    pair = sorted([int(ax1["no"]), int(ax2["no"])])
                     umaren_bets.append(
                         {
                             "券種": "馬連",
-                            "買い目": f"{w_pair[0]} - {w_pair[1]}",
+                            "買い目": f"{pair[0]} - {pair[1]}",
+                            "オッズ": est_umaren_odds,
+                            "prob": p_umaren,
+                        }
+                    )
+            for ax in axes:
+                opponents = [h for h in horses if int(h["mark"]) in [1, 2]]
+                for op in opponents:
+                    p1_ax, p2_ax = ax["probs"]["p1"], ax["probs"]["p2"]
+                    p1_op, p2_op = op["probs"]["p1"], op["probs"]["p2"]
+                    p_umaren = (p1_ax * (p2_op / max(1.0 - p2_ax, 1e-5))) + (
+                        p1_op * (p2_ax / max(1.0 - p2_op, 1e-5))
+                    )
+                    p_umaren *= 0.78
+                    est_umaren_odds = max(round(0.775 / max(p_umaren, 1e-4), 1), 1.2)
+                    pair = sorted([int(ax["no"]), int(op["no"])])
+                    umaren_bets.append(
+                        {
+                            "券種": "馬連",
+                            "買い目": f"{pair[0]} - {pair[1]}",
                             "オッズ": est_umaren_odds,
                             "prob": p_umaren,
                         }
                     )
 
-                # 3. 馬単（1着固定: ax -> op, JRA控除率: 約75.0%）
-                p_umatan = p1_ax * (p2_op / max(1.0 - p2_ax, 1e-5)) * 0.88
+        # 3. 馬単 (軸1頭の時に推奨)
+        if num_axes == 1:
+            ax = axes[0]
+            opponents = [h for h in horses if int(h["no"]) != int(ax["no"])]
+            for op in opponents:
+                p1_ax = ax["probs"]["p1"]
+                p2_ax = ax["probs"]["p2"]
+                p2_op = op["probs"]["p2"]
+                p_umatan = p1_ax * (p2_op / max(1.0 - p2_ax, 1e-5)) * 0.78
                 if p_umatan > 0:
                     est_umatan_odds = max(
                         round(0.750 / max(p_umatan, 1e-4), 1), 1.5
@@ -273,7 +375,7 @@ class UltimateHorseRaceOptimizer:
     def allocate_budget(
         self, bets: list[dict], mode: str, custom_budget: int = None
     ) -> pd.DataFrame:
-        """資金配分アルゴリズム (入力されたオッズに基づいて計算)"""
+        """資金配分アルゴリズム"""
         target_budget = custom_budget if custom_budget is not None else self.budget
         if not bets or target_budget <= 0:
             return pd.DataFrame()
@@ -333,9 +435,9 @@ st.set_page_config(
     page_title="競馬傾斜買い計算機", page_icon="🏇", layout="wide"
 )
 
-st.title("🏇 競馬オッズ・ベイズ傾斜買い計算アプリ (マルチ券種・厳格EV対応)")
+st.title("🏇 競馬オッズ・ベイズ傾斜買い計算アプリ (超厳格化モデル搭載)")
 st.caption(
-    "JRA統計データ×オッズ×印（2は1着確率0%）| 厳格化ベイズ確率＆マルチ券種（ワイド・馬連・馬単）複合最適配分"
+    "市場オッズ集積知への強いベイズ回帰(75%) × 加算型補正平滑化 | 期待値上振れを徹底防衛した超現実的判定"
 )
 
 # サイドバー設定
@@ -407,11 +509,31 @@ st.markdown(
 
 default_data = pd.DataFrame(
     [
-        {"no": 1, "mark": 3, "style": "逃げ", "odds": 2.2},
-        {"no": 3, "mark": 2, "style": "先行", "odds": 5.8},
-        {"no": 5, "mark": 2, "style": "差し", "odds": 8.5},
+        {"no": 1, "frame": 1, "mark": 3, "style": "逃げ", "jockey": "Ｃ．ルメール", "odds": 2.2},
+        {"no": 3, "frame": 2, "mark": 2, "style": "先行", "jockey": "戸崎圭太", "odds": 5.8},
+        {"no": 5, "frame": 3, "mark": 2, "style": "差し", "jockey": "川田将雅", "odds": 8.5},
     ]
 )
+
+jockey_options = [
+    "Ｃ．ルメール",
+    "川田将雅",
+    "戸崎圭太",
+    "松山弘平",
+    "武豊",
+    "坂井瑠星",
+    "横山武史",
+    "岩田望来",
+    "鮫島克駿",
+    "西村淳也",
+    "丹内祐次",
+    "横山和生",
+    "菅原明良",
+    "団野大成",
+    "三浦皇成",
+    "津村明秀",
+    "その他",
+]
 
 edited_df = st.data_editor(
     default_data,
@@ -419,6 +541,9 @@ edited_df = st.data_editor(
     column_config={
         "no": st.column_config.NumberColumn(
             "馬番 (0で無視)", min_value=0, max_value=18, step=1, required=True
+        ),
+        "frame": st.column_config.NumberColumn(
+            "枠順 (1-8)", min_value=1, max_value=8, step=1, required=True
         ),
         "mark": st.column_config.SelectboxColumn(
             "印",
@@ -429,6 +554,11 @@ edited_df = st.data_editor(
         "style": st.column_config.SelectboxColumn(
             "脚質",
             options=["逃げ", "先行", "差し", "追込"],
+            required=True,
+        ),
+        "jockey": st.column_config.SelectboxColumn(
+            "騎手",
+            options=jockey_options,
             required=True,
         ),
         "odds": st.column_config.NumberColumn(
@@ -486,12 +616,21 @@ if st.session_state.get("calculated", False):
     st.divider()
     st.subheader("📊 資金配分シミュレーション＆オッズ調整")
 
+    raw_horses_list = edited_df.to_dict(orient="records")
+    horses_list = [h for h in raw_horses_list if h.get("no") is not None and int(h.get("no", 0)) > 0]
+    num_axes_input = len([h for h in horses_list if int(h.get("mark", 0)) in [3, 4]])
+
+    if num_axes_input == 1:
+        st.info("💡 **【軸1頭戦略】**: 軸馬が1頭のため、**「馬単（1着固定）」＋「ワイド」**の構成で買い目を自動生成しました。")
+    elif num_axes_input >= 2:
+        st.info(f"💡 **【軸{num_axes_input}頭マルチ戦略】**: 軸馬が複数頭のため、1着取りこぼしを防ぐ**「馬連（軸同士・軸相手）」＋「ワイド」**の構成で買い目を自動生成しました。")
+
     tab_combined, tab1, tab2, tab3 = st.tabs(
         [
-            "🎯 【推参・複合ポートフォリオ】ワイド＋馬連＋馬単 ミックス配分",
+            "🎯 【推参・複合ポートフォリオ】ミックス配分",
             "🛡️ 【単一】ワイド (ダッチング/均等払戻)",
-            "⚖️ 【単一】馬連 (期待値傾斜)",
-            "🔥 【単一】馬単 (「印2＝1着0%」期待値傾斜)",
+            "⚖️ 【単一】馬連 (軸2頭以上時に自動推奨)",
+            "🔥 【単一】馬単 (軸1頭時に自動推奨)",
         ]
     )
 
@@ -499,32 +638,23 @@ if st.session_state.get("calculated", False):
     umaren_raw = st.session_state.get("umaren_raw", [])
     umatan_raw = st.session_state.get("umatan_raw", [])
 
-    # =========================================================
-    # タブ0: 複合（ミックス）ポートフォリオ戦略
-    # =========================================================
+    # タブ0: 複合ポートフォリオ
     with tab_combined:
         st.markdown("#### 🎯 券種ミックス複合ポートフォリオ（推奨リスク分散戦略）")
-        st.info("💡 「ワイドで安全に元本をカバーしつつ、馬連・馬単で大きく回収を伸ばす」プロの資金配分スタイルです。")
 
         st.markdown("##### ⚙️ 券種ごとの資金配分比率（合計 100%）")
         col_r1, col_r2, col_r3 = st.columns(3)
         with col_r1:
-            ratio_wide = st.slider("ワイド配分比率 (%)", 0, 100, 40, step=5)
+            ratio_wide = st.slider("ワイド配分比率 (%)", 0, 100, 50 if num_axes_input == 1 else 40, step=5)
         with col_r2:
-            ratio_umaren = st.slider("馬連配分比率 (%)", 0, 100, 30, step=5)
+            ratio_umaren = st.slider("馬連配分比率 (%)", 0, 100, 0 if num_axes_input == 1 else 60, step=5)
         with col_r3:
-            ratio_umatan = st.slider("馬単配分比率 (%)", 0, 100, 30, step=5)
+            ratio_umatan = st.slider("馬単配分比率 (%)", 0, 100, 50 if num_axes_input == 1 else 0, step=5)
 
-        total_ratio = ratio_wide + ratio_umaren + ratio_umatan
-        if total_ratio != 100:
-            st.warning(f"⚠️ 現在の合計比率は {total_ratio}% です。配分比率の合計が100%になるように調整してください。")
+        b_wide = int(total_budget * (ratio_wide / 100.0))
+        b_umaren = int(total_budget * (ratio_umaren / 100.0))
+        b_umatan = int(total_budget * (ratio_umatan / 100.0))
 
-        # 券種ごとの予算
-        b_wide = int(total_budget * (ratio_wide / 100))
-        b_umaren = int(total_budget * (ratio_umaren / 100))
-        b_umatan = int(total_budget * (ratio_umatan / 100))
-
-        # データテーブル統合
         combined_list = []
         for b in wide_raw:
             combined_list.append({**b, "type_sort": 1})
@@ -552,7 +682,6 @@ if st.session_state.get("calculated", False):
                 use_container_width=True,
             )
 
-            # 再計算処理
             updated_combined_bets = edited_combined.to_dict(orient="records")
             
             c_wide_bets = [b for b in updated_combined_bets if b["券種"] == "ワイド"]
@@ -568,17 +697,16 @@ if st.session_state.get("calculated", False):
             if not df_mix_final.empty:
                 max_mix_ev = df_mix_final["期待値(EV)"].max()
                 
-                # 回収率厳格判定
                 if max_mix_ev < 1.0:
                     st.error(
                         "⚠️ **【見送り推奨】数学的に買わない方が得です（購入すると損をする可能性が高いです）。**"
                     )
                     st.caption(
-                        "※理由: 厳格ベイズ試算において全買い目の最高期待値(EV)が1.0未満（JRA控除率を上回る優位性なし）のため、長期的に負け越す公算が高いです。"
+                        "※理由: 厳格ベイズ試算において全買い目の最高期待値(EV)が1.0未満（JRA控除率20%の壁を越える構造的優位性なし）のため、購入すると長期的に損失を出す可能性が極めて高いです。"
                     )
                 else:
                     st.success(
-                        "✅ **【購入推奨】プラス期待値（EV ≥ 1.0）の買い目が含まれており、良好なポートフォリオです。**"
+                        "✅ **【購入推奨】プラス期待値（EV ≥ 1.0）の優位性ある買い目が含まれています。**"
                     )
 
                 st.markdown("##### 📊 最終マルチ資金配分表")
@@ -592,9 +720,7 @@ if st.session_state.get("calculated", False):
                     max_payout = df_mix_final["想定払戻金"].max()
                     st.metric("最大想定払戻金 (跳ね時)", f"{max_payout:,} 円", delta=f"最高回収率 {max_payout / total_budget * 100:.1f}%")
 
-    # =========================================================
-    # タブ1: ワイド（単一）
-    # =========================================================
+    # タブ1: ワイド
     with tab1:
         st.markdown("#### ワイド単一買い（均等払戻ダッチング配分）")
         if wide_raw:
@@ -623,7 +749,7 @@ if st.session_state.get("calculated", False):
                     "⚠️ **【見送り推奨】数学的に買わない方が得です（購入すると損をする可能性が高いです）。**"
                 )
                 st.caption(
-                    "※理由: 設定オッズ・確率に対する最高期待値(EV)が1.0未満、または的中しても回収率100%未満（トリガミ）となります。"
+                    "※理由: 最高期待値(EV)が1.0未満、または的中しても回収率100%未満（トリガミ）となります。"
                 )
             else:
                 st.success(
@@ -639,9 +765,7 @@ if st.session_state.get("calculated", False):
         else:
             st.warning("条件に該当するワイドの買い目がありません。")
 
-    # =========================================================
-    # タブ2: 馬連（単一）
-    # =========================================================
+    # タブ2: 馬連
     with tab2:
         st.markdown("#### 馬連単一買い（期待値ケリー傾斜配分）")
         if umaren_raw:
@@ -686,9 +810,7 @@ if st.session_state.get("calculated", False):
         else:
             st.warning("条件に該当する馬連の買い目がありません。")
 
-    # =========================================================
-    # タブ3: 馬単（単一）
-    # =========================================================
+    # タブ3: 馬単
     with tab3:
         st.markdown("#### 馬単単一買い（「印2＝1着0%」傾斜配分）")
         if umatan_raw:
