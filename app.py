@@ -1,3 +1,4 @@
+import re
 from itertools import combinations
 
 import pandas as pd
@@ -79,6 +80,60 @@ def evaluate(sets: dict, bets: list[dict], budget: int) -> dict:
     return {"exp_ret": exp_ret, "p_none": p_none, "p_ge_budget": p_ge_budget}
 
 
+_HEADER = re.compile(r"^\d+(?:\s+\d+)?$")  # 「枠 馬番」または「馬番」だけの行
+_SEXAGE = re.compile(r"^(?:牡|牝|セン|セ)\d+$")  # 牝2 など。データ行の先頭トークン
+_FLOAT = re.compile(r"^\d+\.\d+$")
+_INT = re.compile(r"^\d+$")
+_NOISE = {"--", "-", "ー", "編集", "◎", "○", "▲", "△", "☆", "注", "×", "穴"}
+
+
+def parse_race_card(text: str) -> tuple[pd.DataFrame, list[str]]:
+    """
+    出馬表の貼り付けテキストから「馬番・馬名・単勝オッズ」を取り出す。
+    データ行（牝2 55.0 騎手 厩舎 馬体重 オッズ 人気）を基準に、
+    直前の「枠 馬番」行と馬名行を遡って対応づける。取消・除外馬は除く。
+    """
+    lines = [ln.replace("\u3000", " ").strip() for ln in text.splitlines()]
+    data_idx = [i for i, ln in enumerate(lines) if ln and _SEXAGE.match(ln.split()[0])]
+    rows, notes = [], []
+    prev_end = -1
+    for idx in data_idx:
+        header_i = None
+        for j in range(idx - 1, prev_end, -1):
+            if _HEADER.match(lines[j]):
+                header_i = j
+                break
+        prev_end = idx
+        if header_i is None:
+            notes.append(f"馬番を特定できない行を飛ばしました: {lines[idx][:24]}")
+            continue
+        no = int(lines[header_i].split()[-1])
+        block = lines[header_i : idx + 1]
+        if any(w in ln for ln in block for w in ("取消", "除外")):
+            notes.append(f"{no}番は取消・除外のため除外しました。")
+            continue
+        names = [ln for ln in lines[header_i + 1 : idx] if ln and ln not in _NOISE]
+        name = names[-1] if names else ""
+
+        tokens = lines[idx].split()
+        odds = float("nan")
+        if tokens and _FLOAT.match(tokens[-1]):
+            odds = float(tokens[-1])
+        elif len(tokens) >= 2 and _INT.match(tokens[-1]) and _FLOAT.match(tokens[-2]):
+            odds = float(tokens[-2])
+        rows.append({"no": no, "name": name, "odds": odds})
+
+    df = pd.DataFrame(rows, columns=["no", "name", "odds"])
+    if df.empty:
+        return df, notes
+    if df["no"].duplicated().any():
+        notes.append("馬番が重複しています。貼り付け範囲を確認してください。")
+    if df["odds"].isna().any():
+        missing = "・".join(str(n) for n in df.loc[df["odds"].isna(), "no"])
+        notes.append(f"単勝オッズを読み取れなかった馬: {missing}番（手入力してください）")
+    return df.sort_values("no").reset_index(drop=True), notes
+
+
 # =========================================================
 # 2. UI
 # =========================================================
@@ -105,31 +160,63 @@ mode = st.sidebar.radio(
 # ---- ① 全頭入力 ----
 st.subheader("① 全頭の単勝オッズと役割")
 st.markdown("確率の正規化に**出走全頭**が必要です。一部だけ入力すると確率が過大になります。")
-default = pd.DataFrame(
-    [
-        {"no": 1, "odds": 2.3, "role": "軸"},
-        {"no": 2, "odds": 3.8, "role": "相手"},
-        {"no": 3, "odds": 5.2, "role": "相手"},
-        {"no": 4, "odds": 7.2, "role": "相手"},
-        {"no": 5, "odds": 10.5, "role": "無印"},
-        {"no": 6, "odds": 17.0, "role": "無印"},
-        {"no": 7, "odds": 30.0, "role": "無印"},
-        {"no": 8, "odds": 55.0, "role": "無印"},
-    ]
-)
+
+if "horses_df" not in st.session_state:
+    st.session_state["horses_df"] = pd.DataFrame(
+        [
+            {"no": 1, "name": "", "odds": 2.3, "role": "軸"},
+            {"no": 2, "name": "", "odds": 3.8, "role": "相手"},
+            {"no": 3, "name": "", "odds": 5.2, "role": "相手"},
+            {"no": 4, "name": "", "odds": 7.2, "role": "相手"},
+            {"no": 5, "name": "", "odds": 10.5, "role": "無印"},
+            {"no": 6, "name": "", "odds": 17.0, "role": "無印"},
+            {"no": 7, "name": "", "odds": 30.0, "role": "無印"},
+            {"no": 8, "name": "", "odds": 55.0, "role": "無印"},
+        ]
+    )
+    st.session_state["horses_ver"] = 0
+
+with st.expander("出馬表を貼り付けて、馬番・馬名・単勝オッズを自動入力"):
+    st.caption(
+        "出馬表をそのまま貼り付けてください。役割（軸・相手）は自分で設定します。"
+        "オッズ更新のために同じレースを貼り直した場合、馬番と馬名が一致する馬の役割は引き継ぎます。"
+    )
+    raw = st.text_area("出馬表", height=220, key="paste_raw", label_visibility="collapsed")
+    if st.button("反映する"):
+        parsed, notes = parse_race_card(raw)
+        if parsed.empty:
+            st.error("馬を読み取れませんでした。「牝2 55.0 騎手 …」の行を含めて貼り付けてください。")
+        else:
+            prev = st.session_state.get("horses_current")
+            kept = {}
+            if prev is not None:
+                kept = {
+                    (int(n), str(nm)): r
+                    for n, nm, r in zip(prev["no"], prev["name"], prev["role"])
+                    if pd.notna(n) and pd.notna(nm) and str(nm) != "" and pd.notna(r)
+                }
+            parsed["role"] = [kept.get((n, nm), "無印") for n, nm in zip(parsed["no"], parsed["name"])]
+            st.session_state["horses_df"] = parsed
+            st.session_state["horses_ver"] += 1
+            st.success(f"{len(parsed)}頭を反映しました。")
+        for n in notes:
+            st.warning(n)
+
 horses = st.data_editor(
-    default,
+    st.session_state["horses_df"],
     num_rows="dynamic",
     column_config={
         "no": st.column_config.NumberColumn("馬番", min_value=1, max_value=18, step=1, required=True),
+        "name": st.column_config.TextColumn("馬名"),
         "odds": st.column_config.NumberColumn("単勝オッズ", min_value=1.0, max_value=999.9, step=0.1, required=True),
         "role": st.column_config.SelectboxColumn("役割", options=["軸", "相手", "無印"], required=True),
     },
-    key="horses",
+    key=f"horses_{st.session_state['horses_ver']}",
 )
+st.session_state["horses_current"] = horses
 
 errors = []
-if horses.isna().any().any():
+if horses[["no", "odds", "role"]].isna().any().any():
     errors.append("空欄があります。")
 else:
     if horses["no"].duplicated().any():
