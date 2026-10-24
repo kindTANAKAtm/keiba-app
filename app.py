@@ -15,10 +15,7 @@ class UltimateHorseRaceOptimizer:
     def get_base_probabilities(self, odds: float, rank: int = 1) -> dict:
         """
         オッズ帯および推定人気順に基づく事前確率の設定
-        【反映資料: 画像1（人気別・着順確率テーブル）】
-        - 1番人気: 1着 33%, 2着 19%, 3着 13%
-        - 2番人気: 1着 19%, 2着 18%, 3着 14%
-        - 3番人気: 1着 14%, 2着 15%, 3着 14% ...
+        【反映資料: 人気別・着順確率テーブル】
         """
         if odds <= 1.2:
             return {"p1": 0.70, "p2": 0.14, "p3": 0.06}
@@ -46,20 +43,16 @@ class UltimateHorseRaceOptimizer:
     ) -> float:
         """
         開催場×トラック(芝/ダート)ごとの脚質有利度補正
-        【反映資料: 画像2（芝前残り率）・画像3（ダート前残り率）】
-        - 芝: 中山(60%), 小倉(62%), 函館(59%) が逃げ・先行超有利
-        - ダート: 函館(74%), 小倉(72%), 新潟(71%), 札幌(71%) が超強力前残り
+        【反映資料: 芝前残り率・ダート前残り率】
         """
         if track == "ダート":
-            # ダートは函館・小倉・新潟・札幌が逃げ先行70%超の超極端前残り
             if venue in ["函館", "小倉", "新潟", "札幌"]:
                 return 1.30 if style in ["逃げ", "先行"] else 0.70
             elif venue in ["中山", "京都", "中京", "阪神", "福島"]:
                 return 1.18 if style in ["逃げ", "先行"] else 0.82
-            else:  # 東京 (差し・追込可)
+            else:  # 東京
                 return 0.95 if style in ["逃げ", "先行"] else 1.10
-        else:
-            # 芝は小倉(62%)・中山(60%)・函館(59%)・阪神(57%)が前残り有利
+        else:  # 芝
             if venue in ["小倉", "中山", "函館"]:
                 return 1.25 if style in ["逃げ", "先行"] else 0.75
             elif venue in ["阪神", "福島", "札幌"]:
@@ -72,25 +65,19 @@ class UltimateHorseRaceOptimizer:
     def get_class_style_modifier(self, race_class: str, style: str) -> float:
         """
         クラス・年齢条件による脚質到達率補正
-        【反映資料: 画像4（クラス別脚質比率）】
-        - 2歳/3歳未勝利: 逃げ・先行が69~72%到達（超前残り）
-        - 古馬オープン/重賞: 差し・追込比率が50%程度まで上昇
+        【反映資料: クラス別脚質比率】
         """
-        if "2歳" in race_class or "未勝利" in race_class or "新馬" in race_class:
+        if "未勝利" in race_class or "新馬" in race_class:
             return 1.22 if style in ["逃げ", "先行"] else 0.78
         elif "オープン" in race_class or "重賞" in race_class:
             return 0.88 if style in ["逃げ", "先行"] else 1.18
-        else:  # 1勝/2勝/3勝クラス
+        else:
             return 1.02 if style in ["逃げ", "先行"] else 0.98
 
     def get_distance_style_modifier(
         self, track: str, dist: int, style: str
     ) -> float:
-        """
-        距離×トラックごとの脚質補正
-        - ダート1000m/1200m/1700m/1800m/2500mの前残り補正
-        - 芝3000m超の逃げ・先行補正、ダート1600mの差し補正
-        """
+        """距離×トラックごとの脚質補正"""
         if track == "ダート":
             if dist <= 1200:
                 return 1.35 if style in ["逃げ", "先行"] else 0.65
@@ -113,9 +100,7 @@ class UltimateHorseRaceOptimizer:
     ) -> dict:
         """
         芝 vs ダートにおける「1着・2着・3着別」脚質別偏重補正
-        【反映資料: 画像5（芝・着順別率）・画像6（ダート・着順別率）】
-        - ダート: 逃げ馬の1着率が23%と突出。差し馬は3着率が35%と高率。
-        - 芝: 逃げ馬の1着率16%、差し馬の3着率38%。
+        【反映資料: 芝・着順別率 / ダート・着順別率】
         """
         if track == "ダート":
             if style == "逃げ":
@@ -144,11 +129,10 @@ class UltimateHorseRaceOptimizer:
         mark = int(horse["mark"])
         style = horse["style"]
 
-        # 1. 事前確率（オッズ帯・人気順）
         base = self.get_base_probabilities(odds, rank)
         p1, p2, p3 = base["p1"], base["p2"], base["p3"]
 
-        # 2. 印によるベイズ補正 (印2は1着確率完全0%固定し、2着・3着へ分配転送)
+        # 印によるベイズ補正 (印2は1着確率完全0%固定)
         if mark == 4:
             p1 = max(p1 * 1.35, 0.65)
             p2 = max(p2 * 1.10, 0.18)
@@ -160,12 +144,11 @@ class UltimateHorseRaceOptimizer:
             p3 += p1 * 0.40
             p1 = 0.0
 
-        # 3. 各種資料データ補正マルチプライヤーの算出
         venue_mod = self.get_venue_style_modifier(
             race_info["venue"], race_info["track"], style
         )
         class_mod = self.get_class_style_modifier(
-            race_info["race_class"], style
+            race_info.get("race_class", "1勝/2勝/3勝クラス"), style
         )
         dist_mod = self.get_distance_style_modifier(
             race_info["track"], race_info["dist"], style
@@ -183,7 +166,6 @@ class UltimateHorseRaceOptimizer:
 
         condition = race_info.get("condition", "良")
         cond_mod = 1.0
-        # 【反映資料: 画像7】ダート重・不良での逃げ先行有利
         if race_info["track"] == "ダート" and condition in ["重", "不良"]:
             if style in ["逃げ", "先行"]:
                 cond_mod = 1.20
@@ -197,7 +179,7 @@ class UltimateHorseRaceOptimizer:
         }
 
     def _normalize_probabilities(self, horses: list[dict]) -> None:
-        """全出走馬の確率総和を1.0に正規化し、各着順の排他性を担保する処理"""
+        """全出走馬の確率総和を1.0に正規化"""
         sum_p1 = sum(h["probs"]["p1"] for h in horses)
         sum_p2 = sum(h["probs"]["p2"] for h in horses)
         sum_p3 = sum(h["probs"]["p3"] for h in horses)
@@ -214,28 +196,22 @@ class UltimateHorseRaceOptimizer:
         self, race_info: dict, horses: list[dict]
     ) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
         """ワイド・馬連・馬単の各買い目生成および資金配分"""
-        # オッズ順にソートして人気ランクを付与
-        sorted_horses = sorted(
-            horses, key=lambda x: float(x["odds"])
-        )
+        sorted_horses = sorted(horses, key=lambda x: float(x["odds"]))
         for idx, h in enumerate(sorted_horses):
-            h["probs"] = self.adjust_probabilities(
-                race_info, h, rank=idx + 1
-            )
+            h["probs"] = self.adjust_probabilities(race_info, h, rank=idx + 1)
 
-        # 全体の確率を1.0へ正規化
         self._normalize_probabilities(horses)
 
         wide_bets, umaren_bets, umatan_bets = [], [], []
 
+        # 軸馬（印4または3）
         axes = [h for h in horses if int(h["mark"]) in [3, 4]]
-        opponents = [h for h in horses if int(h["mark"]) in [1, 2, 3]]
 
         for ax in axes:
-            for op in opponents:
-                if int(ax["no"]) == int(op["no"]):
-                    continue
+            # 相手馬（自分自身以外のすべての馬）
+            opponents = [h for h in horses if int(h["no"]) != int(ax["no"])]
 
+            for op in opponents:
                 p_top3_ax = (
                     ax["probs"]["p1"] + ax["probs"]["p2"] + ax["probs"]["p3"]
                 )
@@ -243,7 +219,7 @@ class UltimateHorseRaceOptimizer:
                     op["probs"]["p1"] + op["probs"]["p2"] + op["probs"]["p3"]
                 )
 
-                # 1. 【ワイド】期待値と合成オッズ算出
+                # 1. ワイド
                 p_wide = min(p_top3_ax * p_top3_op * 1.15, 0.85)
                 est_wide_odds = max(
                     round(
@@ -251,16 +227,17 @@ class UltimateHorseRaceOptimizer:
                     ),
                     1.4,
                 )
+                w_pair = sorted([int(ax["no"]), int(op["no"])])
                 wide_bets.append(
                     {
                         "券種": "ワイド",
-                        "買い目": f"{ax['no']} - {op['no']}",
+                        "買い目": f"{w_pair[0]} - {w_pair[1]}",
                         "オッズ": est_wide_odds,
                         "prob": p_wide,
                     }
                 )
 
-                # 2. 【馬連】1着・2着の双方向条件付き確率合算
+                # 2. 馬連
                 p1_ax, p2_ax = ax["probs"]["p1"], ax["probs"]["p2"]
                 p1_op, p2_op = op["probs"]["p1"], op["probs"]["p2"]
 
@@ -277,13 +254,13 @@ class UltimateHorseRaceOptimizer:
                     umaren_bets.append(
                         {
                             "券種": "馬連",
-                            "買い目": f"{ax['no']} - {op['no']}",
+                            "買い目": f"{w_pair[0]} - {w_pair[1]}",
                             "オッズ": est_umaren_odds,
                             "prob": p_umaren,
                         }
                     )
 
-                # 3. 【馬単】軸馬1着固定の条件付き確率
+                # 3. 馬単（1着固定: ax -> op）
                 p_umatan = p1_ax * (p2_op / max(1.0 - p2_ax, 1e-5))
                 if p_umatan > 0:
                     est_umatan_odds = max(
@@ -306,7 +283,6 @@ class UltimateHorseRaceOptimizer:
         umaren_bets = list({b["買い目"]: b for b in umaren_bets}.values())
         umatan_bets = list({b["買い目"]: b for b in umatan_bets}.values())
 
-        # モードに応じた資金アロケーション
         df_wide = self._allocate_budget(wide_bets, mode="dutching")
         df_umaren = self._allocate_budget(umaren_bets, mode="kelly")
         df_umatan = self._allocate_budget(umatan_bets, mode="kelly")
@@ -314,17 +290,22 @@ class UltimateHorseRaceOptimizer:
         return df_wide, df_umaren, df_umatan
 
     def _allocate_budget(self, bets: list[dict], mode: str) -> pd.DataFrame:
-        """資金配分アルゴリズム（ダッチング/ケリー傾斜 & 100円単位丸め処理）"""
+        """資金配分アルゴリズム"""
         if not bets:
             return pd.DataFrame()
 
         if mode == "dutching":
             sum_inv = sum(1.0 / b["オッズ"] for b in bets)
+            if sum_inv == 0:
+                return pd.DataFrame()
             weights = [(1.0 / b["オッズ"]) / sum_inv for b in bets]
         else:
             ev_list = [b["prob"] * b["オッズ"] for b in bets]
-            sum_ev = max(sum(ev_list), 1e-6)
-            weights = [ev / sum_ev for ev in bets]
+            sum_ev = sum(ev_list)
+            if sum_ev <= 0:
+                weights = [1.0 / len(bets)] * len(bets)
+            else:
+                weights = [ev / sum_ev for ev in ev_list]
 
         allocated_total = 0
         results = []
@@ -336,16 +317,28 @@ class UltimateHorseRaceOptimizer:
 
         rem_budget = int((self.budget - allocated_total) // 100)
         results.sort(key=lambda x: x["_rem"], reverse=True)
-        for i in range(rem_budget):
+        for i in range(min(rem_budget, len(results))):
             results[i]["購入額"] += 100
 
         df = pd.DataFrame(results)
+        df["期待値(EV)"] = (df["prob"] * df["オッズ"]).round(2)
         df["想定払戻金"] = (df["購入額"] * df["オッズ"]).astype(int)
         df["想定回収率"] = (
             (df["想定払戻金"] / self.budget) * 100
         ).map("{:.1f}%".format)
 
-        return df[["券種", "買い目", "オッズ", "購入額", "想定払戻金", "想定回収率"]]
+        return df[
+            [
+                "券種",
+                "買い目",
+                "オッズ",
+                "期待値(EV)",
+                "購入額",
+                "想定払戻金",
+                "想定回収率",
+                "prob",
+            ]
+        ]
 
 
 # =========================================================
@@ -356,9 +349,9 @@ st.set_page_config(
     page_title="競馬傾斜買い計算機", page_icon="🏇", layout="wide"
 )
 
-st.title("🏇 競馬オッズ・ベイズ傾斜買い計算アプリ (全データ統合版)")
+st.title("🏇 競馬オッズ・ベイズ傾斜買い計算アプリ (数学的回収率診断機能付き)")
 st.caption(
-    "JRA全統計データ（競馬場・クラス・距離・馬場・人気別着順率）×「印2＝1着0%」最適配分"
+    "JRA統計データ×オッズ×印による数理最適化 (期待値診断＆買わない判断アルゴリズム搭載)"
 )
 
 # サイドバー設定
@@ -417,31 +410,26 @@ with col_s2:
     condition = st.selectbox("馬場状態", ["良", "稍重", "重", "不良"])
     pace = st.selectbox("展開予想", ["ハイ", "ミドル", "スロー"], index=0)
 
-race_info = {
-    "venue": venue,
-    "track": track,
-    "dist": dist,
-    "weather": weather,
-    "condition": condition,
-    "pace": pace,
-    "race_class": race_class,
-}
-
-# 馬情報入力
+# メインエリア: 馬情報の入力
 st.subheader("🐴 対象馬情報の入力")
 st.markdown(
     """
-**【印の定義】**  
-- **4**: 超本命（勝率極高） | **3**: 本命（3着以内軸） | **2**: 相手（**1着は絶対なし**・2~3着候補） | **1**: 大穴  
+**【印の定義と組み合わせの自由度】**  
+- **4**: 超本命（勝率極高の軸馬）
+- **3**: 本命（軸馬）
+- **2**: 相手/ヒモ（**1着は絶対なし**・2~3着候補）
+- **1**: 大穴（オッズ通りの穴馬）
+
+💡 **印の構成は自由に設定可能**（「4なし」「1なし」「3が複数頭」など軸馬（4または3）が1頭以上いれば自動計算します）
 """
 )
 
 default_data = pd.DataFrame(
     [
-        {"no": 1, "mark": 4, "style": "逃げ", "odds": 1.8},
-        {"no": 3, "mark": 2, "style": "先行", "odds": 6.5},
-        {"no": 5, "mark": 2, "style": "差し", "odds": 9.0},
-        {"no": 8, "mark": 1, "style": "追込", "odds": 22.0},
+        {"no": 1, "mark": 3, "style": "逃げ", "odds": 2.2},
+        {"no": 3, "mark": 2, "style": "先行", "odds": 5.8},
+        {"no": 5, "mark": 2, "style": "差し", "odds": 8.5},
+        {"no": 8, "mark": 1, "style": "追込", "odds": 18.0},
     ]
 )
 
@@ -455,7 +443,7 @@ edited_df = st.data_editor(
         "mark": st.column_config.SelectboxColumn(
             "印",
             options=[4, 3, 2, 1],
-            help="4:超本命, 3:本命, 2:1着なし2-3着, 1:大穴",
+            help="4:超本命, 3:本命軸, 2:1着なし2-3着, 1:大穴",
             required=True,
         ),
         "style": st.column_config.SelectboxColumn(
@@ -479,11 +467,24 @@ edited_df = st.data_editor(
 if st.button("🚀 最適資金配分を計算する", type="primary"):
     horses_list = edited_df.to_dict(orient="records")
 
+    # レース条件の保持
+    race_info = {
+        "venue": venue,
+        "track": track,
+        "dist": dist,
+        "weather": weather,
+        "condition": condition,
+        "pace": pace,
+        "race_class": race_class,
+    }
+
     has_axis = any(int(h["mark"]) in [3, 4] for h in horses_list)
     if not has_axis:
         st.error(
             "⚠️ 軸馬（印「4」または「3」）を少なくとも1頭指定してください。"
         )
+    elif len(horses_list) < 2:
+        st.error("⚠️ 2頭以上の出走馬を入力してください。")
     else:
         optimizer = UltimateHorseRaceOptimizer(budget=total_budget)
         df_wide, df_umaren, df_umatan = optimizer.generate_strategy(
@@ -491,7 +492,7 @@ if st.button("🚀 最適資金配分を計算する", type="primary"):
         )
 
         st.divider()
-        st.subheader("📊 資金配分シミュレーション結果")
+        st.subheader("📊 資金配分シミュレーション＆数学的回収率診断")
 
         tab1, tab2, tab3 = st.tabs(
             [
@@ -501,11 +502,29 @@ if st.button("🚀 最適資金配分を計算する", type="primary"):
             ]
         )
 
+        # タブ1: ワイド
         with tab1:
             st.markdown("#### ワイド（均等払戻ダッチング配分）")
             if not df_wide.empty:
-                st.dataframe(df_wide, use_container_width=True)
+                max_ev_wide = df_wide["期待値(EV)"].max()
                 min_ret = df_wide["想定払戻金"].min()
+
+                # 数学的に買わない方が得かどうかの判定表示
+                if max_ev_wide < 1.0 or min_ret < total_budget:
+                    st.error(
+                        "⚠️ **【見送り推奨】数学的に買わない方が得です（購入すると損をする可能性が高いです）。**"
+                    )
+                    st.caption(
+                        "※理由: 設定オッズ・確率に対する最高期待値(EV)が1.0未満（マイナス期待値）、または的中しても回収率100%未満（トリガミ）となるため、購入を続けると理論上損をするリスクが高い状態です。"
+                    )
+                else:
+                    st.success(
+                        "✅ **【購入推奨】十分な期待値と元本保証ラインが確保されています。**"
+                    )
+
+                st.dataframe(
+                    df_wide.drop(columns=["prob"]), use_container_width=True
+                )
                 st.metric(
                     label="的中時 最小想定払戻金",
                     value=f"{min_ret:,} 円",
@@ -514,10 +533,28 @@ if st.button("🚀 最適資金配分を計算する", type="primary"):
             else:
                 st.warning("条件に該当するワイドの買い目がありません。")
 
+        # タブ2: 馬連
         with tab2:
             st.markdown("#### 馬連（期待値ケリー傾斜配分）")
             if not df_umaren.empty:
-                st.dataframe(df_umaren, use_container_width=True)
+                max_ev_umaren = df_umaren["期待値(EV)"].max()
+
+                # 数学的に買わない方が得かどうかの判定表示
+                if max_ev_umaren < 1.0:
+                    st.error(
+                        "⚠️ **【見送り推奨】数学的に買わない方が得です（購入すると損をする可能性が高いです）。**"
+                    )
+                    st.caption(
+                        "※理由: 買い目全体の最高期待値(EV)が1.0未満のため、賭け続けると理論上マイナス収支（期待値負け）になります。"
+                    )
+                else:
+                    st.success(
+                        "✅ **【購入推奨】プラス期待値（EV ≥ 1.0）の買い目が含まれています。**"
+                    )
+
+                st.dataframe(
+                    df_umaren.drop(columns=["prob"]), use_container_width=True
+                )
                 max_ret = df_umaren["想定払戻金"].max()
                 st.metric(
                     label="最大想定払戻金",
@@ -527,10 +564,28 @@ if st.button("🚀 最適資金配分を計算する", type="primary"):
             else:
                 st.warning("条件に該当する馬連の買い目がありません。")
 
+        # タブ3: 馬単
         with tab3:
             st.markdown("#### 馬単（「印2＝1着0%」超効率ケリー傾斜配分）")
             if not df_umatan.empty:
-                st.dataframe(df_umatan, use_container_width=True)
+                max_ev_umatan = df_umatan["期待値(EV)"].max()
+
+                # 数学的に買わない方が得かどうかの判定表示
+                if max_ev_umatan < 1.0:
+                    st.error(
+                        "⚠️ **【見送り推奨】数学的に買わない方が得です（購入すると損をする可能性が高いです）。**"
+                    )
+                    st.caption(
+                        "※理由: 1着0%切り補正を行っても最高期待値(EV)が1.0未満（オッズ過小評価または確率過小）のため、見送りを推奨します。"
+                    )
+                else:
+                    st.success(
+                        "✅ **【購入推奨】高回収率を狙える高期待値（EV ≥ 1.0）の買い目です。**"
+                    )
+
+                st.dataframe(
+                    df_umatan.drop(columns=["prob"]), use_container_width=True
+                )
                 max_ret = df_umatan["想定払戻金"].max()
                 st.metric(
                     label="最大想定払戻金",
