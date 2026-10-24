@@ -420,16 +420,17 @@ st.markdown(
 - **2**: 相手/ヒモ（**1着は絶対なし**・2~3着候補）
 - **1**: 大穴（オッズ通りの穴馬）
 
-💡 **印の構成は自由に設定可能**（「4なし」「1なし」「3が複数頭」など軸馬（4または3）が1頭以上いれば自動計算します）
+💡 **印の構成は自由に設定可能**（「4なし」「1なし」「3が1頭に2が2頭」など軸馬（4または3）が1頭以上いれば自動計算します）  
+💡 **計算から除外したい馬**は、馬番を「**0**」に設定するか、表の左端にチェックを入れて削除（ゴミ箱ボタン）してください。
 """
 )
 
+# 初期表示用サンプルデータ（ユーザーの利用頻度が高い 3, 2, 2 構成に変更）
 default_data = pd.DataFrame(
     [
         {"no": 1, "mark": 3, "style": "逃げ", "odds": 2.2},
         {"no": 3, "mark": 2, "style": "先行", "odds": 5.8},
         {"no": 5, "mark": 2, "style": "差し", "odds": 8.5},
-        {"no": 8, "mark": 1, "style": "追込", "odds": 18.0},
     ]
 )
 
@@ -438,7 +439,7 @@ edited_df = st.data_editor(
     num_rows="dynamic",
     column_config={
         "no": st.column_config.NumberColumn(
-            "馬番", min_value=1, max_value=18, step=1, required=True
+            "馬番 (0で無視)", min_value=0, max_value=18, step=1, required=True
         ),
         "mark": st.column_config.SelectboxColumn(
             "印",
@@ -465,7 +466,13 @@ edited_df = st.data_editor(
 
 # 計算実行処理
 if st.button("🚀 最適資金配分を計算する", type="primary"):
-    horses_list = edited_df.to_dict(orient="records")
+    raw_horses_list = edited_df.to_dict(orient="records")
+
+    # 馬番が0または空欄の行を自動的に除外・無視するフィルター処理（負荷ゼロ）
+    horses_list = [
+        h for h in raw_horses_list 
+        if h.get("no") is not None and int(h.get("no", 0)) > 0
+    ]
 
     # レース条件の保持
     race_info = {
@@ -484,7 +491,7 @@ if st.button("🚀 最適資金配分を計算する", type="primary"):
             "⚠️ 軸馬（印「4」または「3」）を少なくとも1頭指定してください。"
         )
     elif len(horses_list) < 2:
-        st.error("⚠️ 2頭以上の出走馬を入力してください。")
+        st.error("⚠️ 計算対象となる馬（馬番1以上）を2頭以上入力してください。")
     else:
         optimizer = UltimateHorseRaceOptimizer(budget=total_budget)
         df_wide, df_umaren, df_umatan = optimizer.generate_strategy(
